@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mysql --version)",
+      "Bash(netstat -ano)",
+      "Read(//c/Program Files/MySQL/**)",
+      "Read(//c/Program Files \\(x86\\)/MySQL/**)",
+      "Bash(wmic service *)",
+      "Bash(sc query *)",
+      "Bash(C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe *)",
+      "Bash(mvn --version)",
+      "Bash(where mvn *)",
+      "Bash(where mvnw *)",
+      "Read(//c/Program Files/**)",
+      "Bash(curl -L -o 'C:\\\\Users\\\\27125/.m2/repository/mysql/mysql-connector-java/8.0.33/mysql-connector-java-8.0.33.jar' https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.33/mysql-connector-java-8.0.33.jar)",
+      "WebFetch(domain:repo1.maven.org)",
+      "Bash(rm 'C:\\\\Users\\\\27125/.m2/repository/mysql/mysql-connector-java/8.0.33/mysql-connector-java-8.0.33.jar')",
+      "Bash(curl -v -L -o 'C:\\\\Users\\\\27125/.m2/repository/mysql/mysql-connector-java/8.0.33/mysql-connector-java-8.0.33.jar' https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.33/mysql-connector-java-8.0.33.jar)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.30/mysql-connector-java-8.0.30.jar\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.0.33/mysql-connector-j-8.0.33.jar\")",
+      "Bash(pip install *)",
+      "Bash(python generate_ppt.py)",
+      "Bash(python -X utf8 generate_ppt.py)",
+      "Bash(python -c \"f=open\\('generate_ppt.py','r',encoding='utf-8'\\);lines=f.readlines\\(\\);f.close\\(\\);print\\(lines[1023]\\)\")",
+      "Bash(python build_ppt.py)",
+      "Bash(mysql *)",
+      "Bash(/c/Program Files/MySQL/MySQL Server 8.0/bin/mysql *)"
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200" viewBox="0 0 300 200">
+  <rect fill="#e9ecef" width="300" height="200" rx="8"/>
+  <rect fill="#dee2e6" width="50" height="50" x="125" y="50" rx="4"/>
+  <line x1="100" y1="75" x2="200" y2="75" stroke="#adb5bd" stroke-width="2"/>
+  <line x1="106" y1="70" x2="106" y2="80" stroke="#adb5bd" stroke-width="2"/>
+  <line x1="194" y1="70" x2="194" y2="80" stroke="#adb5bd" stroke-width="2"/>
+  <text fill="#868e96" font-size="14" font-family="sans-serif" text-anchor="middle" x="150" y="125">暂无图片</text>
+</svg>

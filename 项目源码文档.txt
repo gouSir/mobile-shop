@@ -1,0 +1,2977 @@
+================================================================================
+                 手机商城(Mobile Shop) JavaWeb 项目 - 完整源码文档
+================================================================================
+
+【项目概述】
+  本项目是一个基于 Java Servlet + JSP 的手机在线购物商城系统。
+  采用经典 MVC 分层架构：Model(实体类) → DAO(数据访问) → Servlet(控制层) → JSP(视图层)
+
+  技术栈：
+    - 后端：Servlet 4.0 + JSP 2.3 + JSTL 1.2
+    - 数据库：MySQL 8.0 + JDBC（手动管理连接）
+    - 前端：Bootstrap 5.3 + Bootstrap Icons
+    - 构建：Maven + Tomcat 7 Maven Plugin
+    - JDK：1.8
+
+  项目结构：
+    src/main/java/com/shop/
+      ├── model/       实体类 (User, Product, CartItem, Order, OrderItem)
+      ├── dao/         数据访问层 (UserDao, ProductDao, CartDao, OrderDao)
+      ├── servlet/     控制层 Servlet (8个)
+      ├── filter/      过滤器 (EncodingFilter)
+      └── util/        工具类 (DBUtil)
+    src/main/webapp/
+      ├── WEB-INF/web.xml
+      └── jsp/         视图页面 (含 admin/ 子目录)
+    database/init.sql   数据库初始化脚本
+
+  功能模块：
+    用户模块     - 注册、登录、退出
+    商品模块     - 商品列表、搜索、分类/品牌筛选、详情
+    购物车模块   - 添加、修改数量、删除
+    订单模块     - 创建订单、订单列表
+    管理员模块   - 商品管理(CRUD)、订单管理(发货/完成/删除)
+
+================================================================================
+一、构建配置 - pom.xml
+================================================================================
+
+<!-- Maven项目配置，定义了依赖和构建插件 -->
+<project>
+    <groupId>com.shop</groupId>
+    <artifactId>mobile-shop</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>war</packaging>   <!-- 打包为 WAR 部署到 Tomcat -->
+
+    <properties>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <!-- Servlet API 4.0（provided: 容器提供，不打入WAR包） -->
+        <dependency>
+            <groupId>javax.servlet</groupId>
+            <artifactId>javax.servlet-api</artifactId>
+            <version>4.0.1</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- JSP API 2.3 -->
+        <dependency>
+            <groupId>javax.servlet.jsp</groupId>
+            <artifactId>javax.servlet.jsp-api</artifactId>
+            <version>2.3.3</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- JSTL 1.2（JSP标准标签库，提供 <c:> <fmt:> 等标签） -->
+        <dependency>
+            <groupId>javax.servlet</groupId>
+            <artifactId>jstl</artifactId>
+            <version>1.2</version>
+        </dependency>
+
+        <!-- MySQL JDBC 驱动 8.0 -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <version>8.0.33</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>mobile-shop</finalName>
+        <plugins>
+            <!-- Tomcat 7 Maven Plugin - 运行: mvn tomcat7:run -->
+            <plugin>
+                <groupId>org.apache.tomcat.maven</groupId>
+                <artifactId>tomcat7-maven-plugin</artifactId>
+                <version>2.2</version>
+                <configuration>
+                    <port>8088</port>                      <!-- 端口 8088 -->
+                    <path>/mobile-shop</path>              <!-- 上下文路径 -->
+                    <uriEncoding>UTF-8</uriEncoding>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+
+================================================================================
+二、Web 部署描述符 - web.xml
+================================================================================
+
+<!-- Servlet 映射配置：URL路径 → Servlet类 -->
+<web-app version="4.0">
+
+    <display-name>手机商城</display-name>
+
+    <!-- 首页欢迎文件 -->
+    <welcome-file-list>
+        <welcome-file>jsp/index.jsp</welcome-file>
+    </welcome-file-list>
+
+    <!--
+    【编码过滤器】EncodingFilter
+    所有请求(/*)都会先经过此过滤器，设置请求和响应编码为 UTF-8
+    解决中文乱码问题，避免每个 Servlet 里重复写 setCharacterEncoding
+    -->
+    <filter>
+        <filter-name>EncodingFilter</filter-name>
+        <filter-class>com.shop.filter.EncodingFilter</filter-class>
+    </filter>
+    <filter-mapping>
+        <filter-name>EncodingFilter</filter-name>
+        <url-pattern>/*</url-pattern>
+    </filter-mapping>
+
+    <!-- 用户相关Servlet -->
+    <servlet>
+        <servlet-name>LoginServlet</servlet-name>
+        <servlet-class>com.shop.servlet.LoginServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>LoginServlet</servlet-name>
+        <url-pattern>/user/login</url-pattern>       <!-- GET:登录页 POST:执行登录 -->
+    </servlet-mapping>
+
+    <servlet>
+        <servlet-name>RegisterServlet</servlet-name>
+        <servlet-class>com.shop.servlet.RegisterServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>RegisterServlet</servlet-name>
+        <url-pattern>/user/register</url-pattern>    <!-- GET:注册页 POST:执行注册 -->
+    </servlet-mapping>
+
+    <servlet>
+        <servlet-name>LogoutServlet</servlet-name>
+        <servlet-class>com.shop.servlet.LogoutServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>LogoutServlet</servlet-name>
+        <url-pattern>/user/logout</url-pattern>      <!-- GET:销毁Session并跳转首页 -->
+    </servlet-mapping>
+
+    <!-- 商品Servlet -->
+    <servlet>
+        <servlet-name>ProductServlet</servlet-name>
+        <servlet-class>com.shop.servlet.ProductServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>ProductServlet</servlet-name>
+        <url-pattern>/product</url-pattern>
+        <!-- URL参数 action: list(列表)|detail(详情)|search(搜索)
+             |category(按分类)|brand(按品牌) -->
+    </servlet-mapping>
+
+    <!-- 购物车Servlet -->
+    <servlet>
+        <servlet-name>CartServlet</servlet-name>
+        <servlet-class>com.shop.servlet.CartServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>CartServlet</servlet-name>
+        <url-pattern>/cart</url-pattern>
+        <!-- URL参数 action: list(查看)|add(添加)|update(改数量)|delete(删除) -->
+    </servlet-mapping>
+
+    <!-- 订单Servlet -->
+    <servlet>
+        <servlet-name>OrderServlet</servlet-name>
+        <servlet-class>com.shop.servlet.OrderServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>OrderServlet</servlet-name>
+        <url-pattern>/order</url-pattern>
+        <!-- URL参数 action: list(我的订单)|create(下单页)|submit(提交订单) -->
+    </servlet-mapping>
+
+    <!-- 管理员商品管理Servlet -->
+    <servlet>
+        <servlet-name>AdminProductServlet</servlet-name>
+        <servlet-class>com.shop.servlet.AdminProductServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>AdminProductServlet</servlet-name>
+        <url-pattern>/admin/product</url-pattern>
+        <!-- 需要管理员权限，action: list|add|edit|delete|save|update -->
+    </servlet-mapping>
+
+    <!-- 管理员订单管理Servlet -->
+    <servlet>
+        <servlet-name>AdminOrderServlet</servlet-name>
+        <servlet-class>com.shop.servlet.AdminOrderServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>AdminOrderServlet</servlet-name>
+        <url-pattern>/admin/order</url-pattern>
+        <!-- 需要管理员权限，action: list|ship(发货)|complete(完成)|delete -->
+    </servlet-mapping>
+
+</web-app>
+
+================================================================================
+三、数据库设计 - database/init.sql
+================================================================================
+
+-- 创建数据库 mobile_shop（字符集 utf8mb4 支持中文和 Emoji）
+CREATE DATABASE IF NOT EXISTS mobile_shop
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+USE mobile_shop;
+
+-- ========== 1. 用户表 users ==========
+-- 存储注册用户和管理员信息
+-- role 字段区分身份：'user' 普通用户，'admin' 管理员
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,          -- 用户ID，自增主键
+    username VARCHAR(50) NOT NULL UNIQUE,       -- 用户名，唯一
+    password VARCHAR(50) NOT NULL,              -- 密码（明文存储，生产环境应加密）
+    email VARCHAR(100),                         -- 电子邮箱
+    phone VARCHAR(20),                          -- 手机号码
+    address VARCHAR(200),                       -- 收货地址
+    role VARCHAR(10) DEFAULT 'user',            -- 角色：user/admin
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP  -- 注册时间
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ========== 2. 商品表 products ==========
+-- 存储手机商品信息
+CREATE TABLE products (
+    id INT AUTO_INCREMENT PRIMARY KEY,          -- 商品ID
+    name VARCHAR(100) NOT NULL,                 -- 商品名称
+    brand VARCHAR(50),                          -- 品牌（Apple/Huawei/Xiaomi...）
+    description TEXT,                           -- 商品描述
+    price DECIMAL(10,2) NOT NULL,               -- 价格（精确到分）
+    stock INT DEFAULT 0,                        -- 库存数量
+    image VARCHAR(200),                         -- 图片文件名（存放于 images/ 目录）
+    category VARCHAR(50),                       -- 分类（旗舰机/拍照手机/游戏手机/性价比）
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ========== 3. 购物车表 cart ==========
+-- 每个用户一个购物车，购物车项关联商品
+-- 外键约束：删除用户/商品时级联删除对应购物车记录
+CREATE TABLE cart (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,                       -- 用户ID（外键 → users.id）
+    product_id INT NOT NULL,                    -- 商品ID（外键 → products.id）
+    quantity INT DEFAULT 1,                     -- 购买数量
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ========== 4. 订单表 orders ==========
+-- 订单主表，记录每笔订单的汇总信息
+CREATE TABLE orders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,                       -- 下单用户（外键 → users.id）
+    order_no VARCHAR(50) NOT NULL UNIQUE,       -- 订单编号（格式: MO+时间戳+用户ID）
+    total_amount DECIMAL(10,2) NOT NULL,        -- 订单总金额
+    status VARCHAR(20) DEFAULT '待发货',         -- 状态：待发货→已发货→已完成
+    receiver_name VARCHAR(50),                  -- 收货人姓名
+    receiver_phone VARCHAR(20),                 -- 收货人电话
+    receiver_address VARCHAR(200),              -- 收货地址
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ========== 5. 订单详情表 order_items ==========
+-- 订单明细，记录每笔订单中每个商品的购买详情
+CREATE TABLE order_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT NOT NULL,                      -- 所属订单（外键 → orders.id）
+    product_id INT NOT NULL,                    -- 商品ID（外键 → products.id）
+    product_name VARCHAR(100),                  -- 商品名称（快照，防止商品被删后无法显示）
+    product_price DECIMAL(10,2),                -- 商品单价（快照）
+    quantity INT,                               -- 购买数量
+    subtotal DECIMAL(10,2),                     -- 小计 = 单价 × 数量
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id)  -- 不级联删除，保留记录
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ========== 初始数据 ==========
+-- 管理员账号: admin / admin123
+INSERT INTO users (username, password, role) VALUES ('admin', 'admin123', 'admin');
+-- 测试用户: test / test123
+INSERT INTO users (username, password, email, phone, address) VALUES
+('test', 'test123', 'test@qq.com', '13800138000', '北京市朝阳区');
+
+-- 15款手机商品数据
+INSERT INTO products (name, brand, description, price, stock, image, category) VALUES
+('iPhone 16 Pro Max', 'Apple', 'A18 Pro芯片 | 6.9英寸超视网膜XDR显示屏', 9999.00, 50, 'iphone16.jpg', '旗舰机'),
+('iPhone 16', 'Apple', 'A18芯片 | 6.1英寸超视网膜XDR显示屏', 5999.00, 80, 'iphone16_standard.jpg', '旗舰机'),
+('华为 Mate 70 Pro', 'Huawei', '麒麟9100芯片 | 6.82英寸OLED曲面屏', 6999.00, 60, 'mate70.jpg', '旗舰机'),
+('华为 Pura 70 Ultra', 'Huawei', '麒麟9010芯片 | 6.8英寸LTPO OLED屏 | 卫星通信', 8999.00, 45, 'pura70.jpg', '拍照手机'),
+('小米 15 Pro', 'Xiaomi', '骁龙8 Gen4 | 6.73英寸2K AMOLED屏 | 120W快充', 4999.00, 100, 'mi15pro.jpg', '旗舰机'),
+('小米 15', 'Xiaomi', '骁龙8 Gen4 | 6.36英寸1.5K屏 | 90W快充', 3999.00, 120, 'mi15.jpg', '旗舰机'),
+('OPPO Find X8 Pro', 'OPPO', '天玑9400 | 6.78英寸AMOLED | 哈苏影像 | 100W闪充', 5999.00, 70, 'findx8.jpg', '拍照手机'),
+('vivo X200 Pro', 'Vivo', '天玑9400 | 6.78英寸AMOLED | 蔡司APO长焦', 4999.00, 65, 'x200pro.jpg', '拍照手机'),
+('三星 Galaxy S25 Ultra', 'Samsung', '骁龙8 Gen4定制版 | 6.9英寸Dynamic AMOLED | S Pen', 9699.00, 40, 's25ultra.jpg', '旗舰机'),
+('荣耀 Magic7 Pro', 'Honor', '骁龙8 Gen4 | 6.8英寸OLED四曲屏 | 青海湖电池', 5299.00, 55, 'magic7.jpg', '旗舰机'),
+('一加 13', 'OnePlus', '骁龙8 Gen4 | 6.82英寸2K东方屏 | 哈苏影像', 4499.00, 85, 'oneplus13.jpg', '旗舰机'),
+('红米 K80 Pro', 'Redmi', '骁龙8 Gen3 | 6.67英寸2K屏 | 120W快充', 2999.00, 150, 'k80pro.jpg', '性价比'),
+('真我 GT6 Pro', 'Realme', '骁龙8 Gen4 | 6.78英寸1.5K屏 | 240W快充', 3499.00, 90, 'gt6pro.jpg', '性价比'),
+('iQOO 13', 'iQOO', '骁龙8 Gen4 | 6.78英寸2K E7屏 | 电竞芯片', 3999.00, 75, 'iqoo13.jpg', '游戏手机'),
+('ROG Phone 9 Pro', 'ASUS', '骁龙8 Gen4 | 6.78英寸165Hz AMOLED | 肩键', 5499.00, 30, 'rog9.jpg', '游戏手机');
+
+================================================================================
+四、实体模型层 (Model) - 5个实体类
+================================================================================
+
+--------------------------------------------------------------------------------
+4.1 User.java - 用户实体
+--------------------------------------------------------------------------------
+
+package com.shop.model;
+
+/**
+ * 用户实体类 — 对应数据库 users 表
+ * 字段：id, username, password, email, phone, address, role, createTime
+ * role 字段区分用户身份：'user'(普通用户) / 'admin'(管理员)
+ */
+public class User {
+    private int id;              // 用户ID（自增主键）
+    private String username;     // 用户名（唯一）
+    private String password;     // 密码
+    private String email;        // 邮箱
+    private String phone;        // 手机号
+    private String address;      // 收货地址
+    private String role;         // 角色: user 或 admin
+    private String createTime;   // 注册时间
+
+    // 两个构造器：无参构造（必须） + 全参构造（便捷）
+    public User() {}
+
+    public User(int id, String username, String password, String email,
+                String phone, String address, String role, String createTime) {
+        this.id = id;
+        this.username = username;
+        this.password = password;
+        this.email = email;
+        this.phone = phone;
+        this.address = address;
+        this.role = role;
+        this.createTime = createTime;
+    }
+
+    // ★ Getter/Setter 方法 ★
+    // JavaBean规范：属性通过 public getXxx()/setXxx() 暴露
+    // JSP EL表达式（如 ${user.username}）通过 getUsername() 读取
+
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
+
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
+
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
+
+    public String getCreateTime() { return createTime; }
+    public void setCreateTime(String createTime) { this.createTime = createTime; }
+}
+
+--------------------------------------------------------------------------------
+4.2 Product.java - 商品实体
+--------------------------------------------------------------------------------
+
+package com.shop.model;
+
+/**
+ * 商品实体类 — 对应数据库 products 表
+ * 字段：id, name, brand, description, price, stock, image, category, createTime
+ *
+ * ★ price 使用 double 类型 — 虽然数据库中 price 是 DECIMAL(10,2)，
+ *   Java 中 double 足够应付显示，但金融级应用应使用 BigDecimal
+ * ★ image 只存文件名，实际图片放在 /images/ 目录下
+ */
+public class Product {
+    private int id;              // 商品ID
+    private String name;         // 商品名称（如 "iPhone 16 Pro Max"）
+    private String brand;        // 品牌（Apple / Huawei / Xiaomi...）
+    private String description;  // 商品描述
+    private double price;        // 价格（元）
+    private int stock;           // 库存数量
+    private String image;        // 图片文件名（如 "iphone16.jpg"）
+    private String category;     // 分类：旗舰机/拍照手机/游戏手机/性价比
+    private String createTime;   // 上架时间
+
+    public Product() {}
+
+    public Product(int id, String name, String brand, String description,
+                   double price, int stock, String image, String category, String createTime) {
+        this.id = id;
+        this.name = name;
+        this.brand = brand;
+        this.description = description;
+        this.price = price;
+        this.stock = stock;
+        this.image = image;
+        this.category = category;
+        this.createTime = createTime;
+    }
+
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+
+    public String getBrand() { return brand; }
+    public void setBrand(String brand) { this.brand = brand; }
+
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+
+    public double getPrice() { return price; }
+    public void setPrice(double price) { this.price = price; }
+
+    public int getStock() { return stock; }
+    public void setStock(int stock) { this.stock = stock; }
+
+    public String getImage() { return image; }
+    public void setImage(String image) { this.image = image; }
+
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
+
+    public String getCreateTime() { return createTime; }
+    public void setCreateTime(String createTime) { this.createTime = createTime; }
+}
+
+--------------------------------------------------------------------------------
+4.3 CartItem.java - 购物车项实体
+--------------------------------------------------------------------------------
+
+package com.shop.model;
+
+/**
+ * 购物车项实体 — 对应数据库 cart 表 + 关联查询的商品字段
+ *
+ * ★ 设计要点：
+ *   1. 基础字段（id, userId, productId, quantity）来自 cart 表
+ *   2. 关联属性（productName, productBrand, productPrice, productImage）
+ *      通过 JOIN products 表查询获得，用于页面展示商品信息
+ *   3. getSubtotal() 是计算属性，返回 单价×数量，不是数据库字段
+ */
+public class CartItem {
+    private int id;               // 购物车记录ID
+    private int userId;           // 用户ID
+    private int productId;        // 商品ID
+    private int quantity;         // 数量
+    private String createTime;    // 加入时间
+
+    // ★ 以下字段来自关联查询 products 表，用于页面展示
+    private String productName;   // 商品名
+    private String productBrand;  // 品牌
+    private double productPrice;  // 单价
+    private String productImage;  // 图片
+
+    public CartItem() {}
+
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+
+    public int getUserId() { return userId; }
+    public void setUserId(int userId) { this.userId = userId; }
+
+    public int getProductId() { return productId; }
+    public void setProductId(int productId) { this.productId = productId; }
+
+    public int getQuantity() { return quantity; }
+    public void setQuantity(int quantity) { this.quantity = quantity; }
+
+    public String getCreateTime() { return createTime; }
+    public void setCreateTime(String createTime) { this.createTime = createTime; }
+
+    public String getProductName() { return productName; }
+    public void setProductName(String productName) { this.productName = productName; }
+
+    public String getProductBrand() { return productBrand; }
+    public void setProductBrand(String productBrand) { this.productBrand = productBrand; }
+
+    public double getProductPrice() { return productPrice; }
+    public void setProductPrice(double productPrice) { this.productPrice = productPrice; }
+
+    public String getProductImage() { return productImage; }
+    public void setProductImage(String productImage) { this.productImage = productImage; }
+
+    /**
+     * ★ 计算属性：小计 = 单价 × 数量
+     * 不用存储到数据库，每次调用时实时计算
+     */
+    public double getSubtotal() {
+        return productPrice * quantity;
+    }
+}
+
+--------------------------------------------------------------------------------
+4.4 Order.java - 订单实体
+--------------------------------------------------------------------------------
+
+package com.shop.model;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 订单实体 — 对应数据库 orders 表
+ *
+ * ★ 一对多关系：一个订单(Order)包含多个订单明细(OrderItem)
+ *   items 列表通过 OrderDao 加载
+ *
+ * ★ 订单编号规则：MO + 时间戳(yyyyMMddHHmmss) + 用户ID补零4位
+ *   例如：MO202506271430520001
+ */
+public class Order {
+    private int id;                 // 订单ID
+    private int userId;             // 下单用户ID
+    private String orderNo;         // 订单编号（唯一）
+    private double totalAmount;     // 总金额
+    private String status;          // 状态：待发货 / 已发货 / 已完成
+    private String receiverName;    // 收货人
+    private String receiverPhone;   // 收货电话
+    private String receiverAddress; // 收货地址
+    private String createTime;      // 下单时间
+
+    // ★ 订单明细列表 — 一对多关系
+    private List<OrderItem> items = new ArrayList<>();
+
+    public Order() {}
+
+    // Getter/Setter（略）
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+    // ... 其他 getter/setter 省略，参见源码
+
+    /** 获取订单明细 */
+    public List<OrderItem> getItems() { return items; }
+    public void setItems(List<OrderItem> items) { this.items = items; }
+}
+
+--------------------------------------------------------------------------------
+4.5 OrderItem.java - 订单明细实体
+--------------------------------------------------------------------------------
+
+package com.shop.model;
+
+/**
+ * 订单明细实体 — 对应数据库 order_items 表
+ *
+ * ★ 设计说明：
+ *   productName 和 productPrice 是下单时的快照值
+ *   即使后续商品被修改或删除，订单详情中仍保留当时的名称和价格
+ */
+public class OrderItem {
+    private int id;               // 明细ID
+    private int orderId;          // 所属订单ID
+    private int productId;        // 商品ID
+    private String productName;   // 商品名称（快照）
+    private double productPrice;  // 商品单价（快照）
+    private int quantity;         // 购买数量
+    private double subtotal;      // 小计
+
+    public OrderItem() {}
+
+    // Getter/Setter（略）
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+    // ... 其他 getter/setter 省略，参见源码
+}
+
+================================================================================
+五、工具类 (Util)
+================================================================================
+
+--------------------------------------------------------------------------------
+5.1 DBUtil.java - 数据库连接工具
+--------------------------------------------------------------------------------
+
+package com.shop.util;
+
+import java.sql.*;
+
+/**
+ * 数据库连接工具类
+ *
+ * ★ 核心职责：
+ *   1. 加载 MySQL JDBC 驱动
+ *   2. 提供 getConnection() 获取数据库连接
+ *   3. 提供 close() 方法安全关闭资源（防止连接泄漏）
+ *
+ * ★ 设计模式：
+ *   - 使用 static 块加载驱动（只执行一次）
+ *   - URL/USER/PASSWORD 硬编码（简单项目做法，生产环境应放配置文件）
+ *
+ * ★ 连接信息：
+ *   数据库：localhost:3306/mobile_shop
+ *   用户名：root
+ *   密码：root
+ *   参数：useSSL=false, serverTimezone=Asia/Shanghai, characterEncoding=utf-8
+ */
+public class DBUtil {
+
+    // JDBC连接URL — 连接到本地MySQL的mobile_shop数据库
+    // useSSL=false：关闭SSL（本地开发不需要加密连接）
+    // serverTimezone=Asia/Shanghai：指定时区为东八区
+    // characterEncoding=utf-8：指定通信编码
+    private static final String URL =
+        "jdbc:mysql://localhost:3306/mobile_shop?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf-8";
+    private static final String USER = "root";
+    private static final String PASSWORD = "root";
+
+    /**
+     * ★ static 初始化块 — 类加载时执行一次
+     * 加载 MySQL 8.x JDBC 驱动类 com.mysql.cj.jdbc.Driver
+     * 注意：MySQL 5.x 驱动是 com.mysql.jdbc.Driver（已废弃）
+     */
+    static {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+            throw new RuntimeException("MySQL驱动加载失败", e);
+        }
+    }
+
+    /**
+     * 获取数据库连接
+     * ★ 每次调用都创建新连接，调用方用完必须 close()
+     * 生产环境建议使用连接池（如 HikariCP、Druid）
+     */
+    public static Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(URL, USER, PASSWORD);
+    }
+
+    /**
+     * ★ 安全关闭资源（Connection + Statement + ResultSet）
+     * 每个资源独立 try-catch，确保一个关闭失败不影响其他
+     *
+     * @param conn 数据库连接
+     * @param stmt Statement 或 PreparedStatement
+     * @param rs   结果集
+     */
+    public static void close(Connection conn, Statement stmt, ResultSet rs) {
+        try {
+            if (rs != null) rs.close();     // 先关 ResultSet
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        try {
+            if (stmt != null) stmt.close(); // 再关 Statement
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        try {
+            if (conn != null) conn.close(); // 最后关 Connection
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * 重载：关闭 Connection 和 Statement（无 ResultSet 时使用）
+     */
+    public static void close(Connection conn, Statement stmt) {
+        close(conn, stmt, null);
+    }
+}
+
+================================================================================
+六、过滤器 (Filter)
+================================================================================
+
+--------------------------------------------------------------------------------
+6.1 EncodingFilter.java - 编码过滤器
+--------------------------------------------------------------------------------
+
+package com.shop.filter;
+
+import javax.servlet.*;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
+/**
+ * 编码过滤器 — 统一设置请求和响应的字符编码为 UTF-8
+ *
+ * ★ 为什么需要？
+ *   如果没有这个过滤器，每个Servlet都要手动写：
+ *     req.setCharacterEncoding("UTF-8");
+ *     resp.setContentType("text/html;charset=UTF-8");
+ *   使用过滤器后，一次配置，所有请求自动生效
+ *
+ * ★ web.xml 中配置 url-pattern 为 /* ，拦截所有请求
+ * ★ doFilter 中的 chain.doFilter() 将请求传递给下一个过滤器或目标 Servlet
+ */
+public class EncodingFilter implements Filter {
+
+    /** 过滤器初始化（无需额外配置） */
+    @Override
+    public void init(FilterConfig filterConfig) throws ServletException {
+    }
+
+    /**
+     * ★ 核心方法：在每个请求到达 Servlet 之前执行
+     *
+     * 处理流程：
+     *   1. 将通用 ServletRequest/Response 转为 HTTP 版本
+     *   2. 设置请求编码为 UTF-8（让 req.getParameter() 正确读取中文）
+     *   3. 设置响应内容类型为 text/html;charset=UTF-8（让浏览器正确渲染中文）
+     *   4. 调用 chain.doFilter() 放行，继续后续处理
+     */
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+        HttpServletRequest req = (HttpServletRequest) request;
+        HttpServletResponse resp = (HttpServletResponse) response;
+
+        req.setCharacterEncoding("UTF-8");
+        resp.setContentType("text/html;charset=UTF-8");
+
+        chain.doFilter(req, resp);  // ★ 必须调用，否则请求链中断
+    }
+
+    /** 过滤器销毁（无需清理资源） */
+    @Override
+    public void destroy() {
+    }
+}
+
+================================================================================
+七、数据访问层 (DAO) - 4个数据访问类
+================================================================================
+
+--------------------------------------------------------------------------------
+7.1 UserDao.java - 用户数据访问
+--------------------------------------------------------------------------------
+
+package com.shop.dao;
+
+import com.shop.model.User;
+import com.shop.util.DBUtil;
+import java.sql.*;
+
+/**
+ * 用户数据访问对象 (Data Access Object)
+ *
+ * ★ 设计模式：DAO 模式 — 将数据访问逻辑与业务逻辑分离
+ *   每个 DAO 负责一张表的 CRUD 操作
+ *
+ * ★ 方法列表：
+ *   findByUsernameAndPassword() — 登录验证
+ *   findByUsername()            — 注册时检查用户名重复
+ *   findById()                  — 注册后获取完整用户信息
+ *   save()                      — 新增用户（注册）
+ *   extractUser()               — 私有辅助方法：ResultSet → User
+ */
+public class UserDao {
+
+    /**
+     * ★ 登录验证
+     * 根据用户名和密码精确匹配查找用户
+     * 使用 PreparedStatement 防止 SQL注入
+     *
+     * @param username 用户名
+     * @param password 密码
+     * @return 匹配成功返回 User 对象，失败返回 null
+     */
+    public User findByUsernameAndPassword(String username, String password) {
+        String sql = "SELECT * FROM users WHERE username = ? AND password = ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setString(1, username);  // ? 占位符，索引从1开始
+            ps.setString(2, password);
+            rs = ps.executeQuery();     // 执行 SELECT
+            if (rs.next()) {
+                return extractUser(rs);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps, rs);  // ★ finally 块确保资源一定被释放
+        }
+        return null;
+    }
+
+    /**
+     * ★ 按用户名查找（注册时检查是否重复）
+     */
+    public User findByUsername(String username) {
+        String sql = "SELECT * FROM users WHERE username = ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setString(1, username);
+            rs = ps.executeQuery();
+            if (rs.next()) {
+                return extractUser(rs);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps, rs);
+        }
+        return null;
+    }
+
+    /**
+     * ★ 按ID查找用户（注册后获取带ID的完整用户）
+     */
+    public User findById(int id) {
+        String sql = "SELECT * FROM users WHERE id = ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, id);           // setInt 用于整数类型
+            rs = ps.executeQuery();
+            if (rs.next()) {
+                return extractUser(rs);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps, rs);
+        }
+        return null;
+    }
+
+    /**
+     * ★ 新增用户（注册）
+     *
+     * Statement.RETURN_GENERATED_KEYS：告诉 JDBC 返回自增主键
+     * 返回值：成功返回新用户ID，失败返回 -1
+     */
+    public int save(User user) {
+        String sql = "INSERT INTO users (username, password, email, phone, address) VALUES (?, ?, ?, ?, ?)";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        try {
+            conn = DBUtil.getConnection();
+            // ★ 第二个参数指定返回自增键
+            ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, user.getUsername());
+            ps.setString(2, user.getPassword());
+            ps.setString(3, user.getEmail());
+            ps.setString(4, user.getPhone());
+            ps.setString(5, user.getAddress());
+            int rows = ps.executeUpdate();  // 执行 INSERT
+            if (rows > 0) {
+                ResultSet rs = ps.getGeneratedKeys();  // ★ 获取自增ID
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps);  // 只有 conn 和 ps，没有 rs
+        }
+        return -1;
+    }
+
+    /**
+     * ★ 私有辅助方法：从 ResultSet 提取 User 对象
+     * 抽取公共代码，避免在每个查询方法中重复写 getInt/getString
+     */
+    private User extractUser(ResultSet rs) throws SQLException {
+        User user = new User();
+        user.setId(rs.getInt("id"));
+        user.setUsername(rs.getString("username"));
+        user.setPassword(rs.getString("password"));
+        user.setEmail(rs.getString("email"));
+        user.setPhone(rs.getString("phone"));
+        user.setAddress(rs.getString("address"));
+        user.setRole(rs.getString("role"));
+        user.setCreateTime(rs.getString("create_time"));  // 数据库字段用下划线
+        return user;
+    }
+}
+
+--------------------------------------------------------------------------------
+7.2 ProductDao.java - 商品数据访问
+--------------------------------------------------------------------------------
+
+package com.shop.dao;
+
+import com.shop.model.Product;
+import com.shop.util.DBUtil;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 商品数据访问对象
+ *
+ * ★ 方法列表：
+ *   findAll()          — 全部商品（ORDER BY create_time DESC）
+ *   findByCategory()   — 按分类筛选
+ *   findByBrand()      — 按品牌筛选
+ *   findById()         — 商品详情
+ *   search()           — 模糊搜索（名称/品牌/描述）
+ *   save()             — 新增商品（管理员）
+ *   update()           — 更新商品（管理员）
+ *   delete()           — 删除商品（管理员）
+ *   updateStock()      — 扣减库存（下单时使用）
+ */
+public class ProductDao {
+
+    /**
+     * ★ 获取所有商品，按上架时间倒序排列
+     */
+    public List<Product> findAll() {
+        List<Product> list = new ArrayList<>();
+        String sql = "SELECT * FROM products ORDER BY create_time DESC";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            rs = ps.executeQuery();
+            while (rs.next()) {          // 循环读取多行结果
+                list.add(extractProduct(rs));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps, rs);
+        }
+        return list;
+    }
+
+    /**
+     * ★ 按分类获取商品
+     */
+    public List<Product> findByCategory(String category) {
+        List<Product> list = new ArrayList<>();
+        String sql = "SELECT * FROM products WHERE category = ? ORDER BY create_time DESC";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setString(1, category);
+            rs = ps.executeQuery();
+            while (rs.next()) {
+                list.add(extractProduct(rs));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps, rs);
+        }
+        return list;
+    }
+
+    /**
+     * ★ 按品牌获取商品
+     */
+    public List<Product> findByBrand(String brand) {
+        List<Product> list = new ArrayList<>();
+        String sql = "SELECT * FROM products WHERE brand = ? ORDER BY create_time DESC";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setString(1, brand);
+            rs = ps.executeQuery();
+            while (rs.next()) {
+                list.add(extractProduct(rs));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps, rs);
+        }
+        return list;
+    }
+
+    /**
+     * ★ 按ID获取单个商品（详情页）
+     */
+    public Product findById(int id) {
+        String sql = "SELECT * FROM products WHERE id = ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, id);
+            rs = ps.executeQuery();
+            if (rs.next()) {
+                return extractProduct(rs);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps, rs);
+        }
+        return null;  // 商品不存在时返回 null
+    }
+
+    /**
+     * ★ 模糊搜索 — 在商品名称、品牌、描述中搜索关键词
+     *
+     * LIKE %keyword% 匹配包含关键词的任意位置
+     * 三个条件用 OR 连接，满足任一即返回
+     */
+    public List<Product> search(String keyword) {
+        List<Product> list = new ArrayList<>();
+        String sql = "SELECT * FROM products WHERE name LIKE ? OR brand LIKE ? OR description LIKE ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            String kw = "%" + keyword + "%";  // ★ 构建模糊匹配模式
+            ps.setString(1, kw);  // 名称匹配
+            ps.setString(2, kw);  // 品牌匹配
+            ps.setString(3, kw);  // 描述匹配
+            rs = ps.executeQuery();
+            while (rs.next()) {
+                list.add(extractProduct(rs));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps, rs);
+        }
+        return list;
+    }
+
+    /**
+     * ★ 新增商品（管理员）
+     * @return 成功返回商品ID，失败返回 -1
+     */
+    public int save(Product product) {
+        String sql = "INSERT INTO products (name, brand, description, price, stock, image, category) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, product.getName());
+            ps.setString(2, product.getBrand());
+            ps.setString(3, product.getDescription());
+            ps.setDouble(4, product.getPrice());  // price 是 double
+            ps.setInt(5, product.getStock());
+            ps.setString(6, product.getImage());
+            ps.setString(7, product.getCategory());
+            int rows = ps.executeUpdate();
+            if (rows > 0) {
+                ResultSet rs = ps.getGeneratedKeys();
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps);
+        }
+        return -1;
+    }
+
+    /**
+     * ★ 更新商品（管理员）
+     * @return true=成功, false=失败
+     */
+    public boolean update(Product product) {
+        String sql = "UPDATE products SET name=?, brand=?, description=?, price=?, stock=?, image=?, category=? WHERE id=?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setString(1, product.getName());
+            ps.setString(2, product.getBrand());
+            ps.setString(3, product.getDescription());
+            ps.setDouble(4, product.getPrice());
+            ps.setInt(5, product.getStock());
+            ps.setString(6, product.getImage());
+            ps.setString(7, product.getCategory());
+            ps.setInt(8, product.getId());       // WHERE id=?
+            return ps.executeUpdate() > 0;       // 返回受影响行数 > 0
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps);
+        }
+        return false;
+    }
+
+    /**
+     * ★ 删除商品（管理员）
+     * 注意：购物车和订单中的外键会阻止删除有引用记录的商品
+     */
+    public boolean delete(int id) {
+        String sql = "DELETE FROM products WHERE id = ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, id);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps);
+        }
+        return false;
+    }
+
+    /**
+     * ★ 扣减库存（下单时调用）
+     *
+     * SQL: UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?
+     *
+     * ★ 关键设计：WHERE stock >= ? 利用数据库行级锁保证并发安全
+     *   如果库存不足（stock < quantity），WHERE 条件不满足，影响行数 = 0
+     *   避免了"超卖"问题（多个用户同时购买最后一个库存）
+     */
+    public boolean updateStock(int id, int quantity) {
+        String sql = "UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, quantity);   // 要减的数量
+            ps.setInt(2, id);         // 商品ID
+            ps.setInt(3, quantity);   // ★ 库存必须 ≥ 购买数量
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps);
+        }
+        return false;
+    }
+
+    /** 私有辅助方法：ResultSet → Product */
+    private Product extractProduct(ResultSet rs) throws SQLException {
+        Product product = new Product();
+        product.setId(rs.getInt("id"));
+        product.setName(rs.getString("name"));
+        product.setBrand(rs.getString("brand"));
+        product.setDescription(rs.getString("description"));
+        product.setPrice(rs.getDouble("price"));
+        product.setStock(rs.getInt("stock"));
+        product.setImage(rs.getString("image"));
+        product.setCategory(rs.getString("category"));
+        product.setCreateTime(rs.getString("create_time"));
+        return product;
+    }
+}
+
+--------------------------------------------------------------------------------
+7.3 CartDao.java - 购物车数据访问
+--------------------------------------------------------------------------------
+
+package com.shop.dao;
+
+import com.shop.model.CartItem;
+import com.shop.util.DBUtil;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 购物车数据访问对象
+ *
+ * ★ 方法列表：
+ *   findByUserId()          — 获取用户购物车（JOIN products 表获取商品信息）
+ *   findByUserAndProduct()  — 查找购物车中是否已存在某商品（去重用）
+ *   add()                   — 添加到购物车
+ *   updateQuantity()        — 更新购买数量
+ *   delete()                — 删除单个购物车项
+ *   clearByUserId()         — 下单后清空购物车
+ */
+public class CartDao {
+
+    /**
+     * ★ 获取用户购物车 — JOIN 查询关联商品名称、品牌、价格、图片
+     *
+     * SQL 解析：
+     *   SELECT c.*, p.name AS product_name, ...
+     *   FROM cart c JOIN products p ON c.product_id = p.id
+     *   WHERE c.user_id = ?
+     *
+     * 为什么要 JOIN？
+     *   购物车表只存 product_id，展示时需要商品名称、价格等
+     *   通过一次 JOIN 查询获取所有数据，避免 N+1 查询问题
+     */
+    public List<CartItem> findByUserId(int userId) {
+        List<CartItem> list = new ArrayList<>();
+        String sql = "SELECT c.*, p.name AS product_name, p.brand AS product_brand, " +
+                     "p.price AS product_price, p.image AS product_image " +
+                     "FROM cart c JOIN products p ON c.product_id = p.id " +
+                     "WHERE c.user_id = ? ORDER BY c.create_time DESC";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, userId);
+            rs = ps.executeQuery();
+            while (rs.next()) {
+                list.add(extractCartItem(rs));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps, rs);
+        }
+        return list;
+    }
+
+    /**
+     * ★ 查找购物车中是否已有某商品
+     * 用于判断：已有 → 更新数量，没有 → 新增记录
+     */
+    public CartItem findByUserAndProduct(int userId, int productId) {
+        String sql = "SELECT c.*, p.name AS product_name, p.brand AS product_brand, " +
+                     "p.price AS product_price, p.image AS product_image " +
+                     "FROM cart c JOIN products p ON c.product_id = p.id " +
+                     "WHERE c.user_id = ? AND c.product_id = ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, userId);
+            ps.setInt(2, productId);
+            rs = ps.executeQuery();
+            if (rs.next()) {
+                return extractCartItem(rs);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps, rs);
+        }
+        return null;
+    }
+
+    /** 新增购物车记录 */
+    public boolean add(CartItem item) {
+        String sql = "INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?)";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, item.getUserId());
+            ps.setInt(2, item.getProductId());
+            ps.setInt(3, item.getQuantity());
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps);
+        }
+        return false;
+    }
+
+    /** 更新购物车项数量 */
+    public boolean updateQuantity(int id, int quantity) {
+        String sql = "UPDATE cart SET quantity = ? WHERE id = ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, quantity);
+            ps.setInt(2, id);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps);
+        }
+        return false;
+    }
+
+    /** 删除单个购物车项 */
+    public boolean delete(int id) {
+        String sql = "DELETE FROM cart WHERE id = ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, id);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps);
+        }
+        return false;
+    }
+
+    /**
+     * ★ 下单后清空用户购物车
+     */
+    public boolean clearByUserId(int userId) {
+        String sql = "DELETE FROM cart WHERE user_id = ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, userId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps);
+        }
+        return false;
+    }
+
+    /** 私有辅助方法 */
+    private CartItem extractCartItem(ResultSet rs) throws SQLException {
+        CartItem item = new CartItem();
+        item.setId(rs.getInt("id"));
+        item.setUserId(rs.getInt("user_id"));
+        item.setProductId(rs.getInt("product_id"));
+        item.setQuantity(rs.getInt("quantity"));
+        item.setCreateTime(rs.getString("create_time"));
+        // ★ 关联属性（来自 products 表）
+        item.setProductName(rs.getString("product_name"));
+        item.setProductBrand(rs.getString("product_brand"));
+        item.setProductPrice(rs.getDouble("product_price"));
+        item.setProductImage(rs.getString("product_image"));
+        return item;
+    }
+}
+
+--------------------------------------------------------------------------------
+7.4 OrderDao.java - 订单数据访问
+--------------------------------------------------------------------------------
+
+package com.shop.dao;
+
+import com.shop.model.Order;
+import com.shop.model.OrderItem;
+import com.shop.util.DBUtil;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 订单数据访问对象
+ *
+ * ★ 事务管理关键点（createOrder 方法）：
+ *   1. setAutoCommit(false) 开启事务
+ *   2. 插入订单主表
+ *   3. 批量插入订单明细（addBatch + executeBatch）
+ *   4. commit() 提交或 rollback() 回滚
+ *   5. finally 中恢复 setAutoCommit(true)
+ */
+public class OrderDao {
+
+    /**
+     * ★ 创建订单（包含事务管理和批量插入）
+     *
+     * 流程：
+     *   1. 开启事务
+     *   2. 插入 orders 表获取 orderId
+     *   3. 批量插入 order_items 表
+     *   4. 提交事务
+     *   5. 任何异常 → 回滚
+     *
+     * @return 成功返回订单ID，失败返回 -1
+     */
+    public int createOrder(Order order) {
+        String sql = "INSERT INTO orders (user_id, order_no, total_amount, status, receiver_name, receiver_phone, receiver_address) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?)";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        try {
+            conn = DBUtil.getConnection();
+            conn.setAutoCommit(false);  // ★ 关闭自动提交，开启事务
+
+            // 第1步：插入订单主表
+            ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setInt(1, order.getUserId());
+            ps.setString(2, order.getOrderNo());
+            ps.setDouble(3, order.getTotalAmount());
+            ps.setString(4, order.getStatus());
+            ps.setString(5, order.getReceiverName());
+            ps.setString(6, order.getReceiverPhone());
+            ps.setString(7, order.getReceiverAddress());
+            ps.executeUpdate();
+
+            ResultSet rs = ps.getGeneratedKeys();
+            int orderId = -1;
+            if (rs.next()) {
+                orderId = rs.getInt(1);  // 获取自增订单ID
+            }
+
+            // 第2步：批量插入订单明细
+            String itemSql = "INSERT INTO order_items (order_id, product_id, product_name, product_price, quantity, subtotal) " +
+                             "VALUES (?, ?, ?, ?, ?, ?)";
+            PreparedStatement itemPs = conn.prepareStatement(itemSql);
+            for (OrderItem item : order.getItems()) {
+                itemPs.setInt(1, orderId);
+                itemPs.setInt(2, item.getProductId());
+                itemPs.setString(3, item.getProductName());    // 快照商品名
+                itemPs.setDouble(4, item.getProductPrice());   // 快照单价
+                itemPs.setInt(5, item.getQuantity());
+                itemPs.setDouble(6, item.getSubtotal());
+                itemPs.addBatch();  // ★ 加入批处理队列
+            }
+            itemPs.executeBatch();  // ★ 一次性执行所有INSERT
+
+            conn.commit();  // ★ 提交事务，数据真正写入数据库
+            return orderId;
+        } catch (SQLException e) {
+            try {
+                if (conn != null) conn.rollback();  // ★ 异常回滚，保证数据一致性
+            } catch (SQLException ex) { ex.printStackTrace(); }
+            e.printStackTrace();
+        } finally {
+            try {
+                if (conn != null) conn.setAutoCommit(true);  // ★ 恢复自动提交
+            } catch (SQLException e) { e.printStackTrace(); }
+            DBUtil.close(conn, ps);
+        }
+        return -1;
+    }
+
+    /**
+     * ★ 获取用户的所有订单（含明细）
+     *
+     * 每次循环中调用 findItemsByOrderId() 加载明细
+     * 注意：这会产生 N+1 查询（1次查订单 + N次查明细）
+     * 对于小型项目可接受，大型项目应用 JOIN + MyBatis 等框架
+     */
+    public List<Order> findByUserId(int userId) {
+        List<Order> list = new ArrayList<>();
+        String sql = "SELECT * FROM orders WHERE user_id = ? ORDER BY create_time DESC";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, userId);
+            rs = ps.executeQuery();
+            while (rs.next()) {
+                Order order = extractOrder(rs);
+                order.setItems(findItemsByOrderId(order.getId()));  // 加载明细
+                list.add(order);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps, rs);
+        }
+        return list;
+    }
+
+    /**
+     * ★ 获取所有订单（管理员用）
+     */
+    public List<Order> findAll() {
+        List<Order> list = new ArrayList<>();
+        String sql = "SELECT * FROM orders ORDER BY create_time DESC";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            rs = ps.executeQuery();
+            while (rs.next()) {
+                Order order = extractOrder(rs);
+                order.setItems(findItemsByOrderId(order.getId()));
+                list.add(order);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps, rs);
+        }
+        return list;
+    }
+
+    /**
+     * ★ 根据ID获取单个订单
+     */
+    public Order findById(int id) {
+        String sql = "SELECT * FROM orders WHERE id = ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, id);
+            rs = ps.executeQuery();
+            if (rs.next()) {
+                Order order = extractOrder(rs);
+                order.setItems(findItemsByOrderId(order.getId()));
+                return order;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps, rs);
+        }
+        return null;
+    }
+
+    /**
+     * ★ 更新订单状态（管理员操作）
+     * 状态流转：待发货 → 已发货 → 已完成
+     */
+    public boolean updateStatus(int id, String status) {
+        String sql = "UPDATE orders SET status = ? WHERE id = ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setString(1, status);
+            ps.setInt(2, id);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps);
+        }
+        return false;
+    }
+
+    /**
+     * ★ 删除订单（管理员操作）
+     * 注意：外键 CASCADE 会自动删除关联的 order_items
+     */
+    public boolean delete(int id) {
+        String sql = "DELETE FROM orders WHERE id = ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, id);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps);
+        }
+        return false;
+    }
+
+    /**
+     * ★ 查询订单明细（私有辅助方法）
+     */
+    private List<OrderItem> findItemsByOrderId(int orderId) {
+        List<OrderItem> list = new ArrayList<>();
+        String sql = "SELECT * FROM order_items WHERE order_id = ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = DBUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, orderId);
+            rs = ps.executeQuery();
+            while (rs.next()) {
+                OrderItem item = new OrderItem();
+                item.setId(rs.getInt("id"));
+                item.setOrderId(rs.getInt("order_id"));
+                item.setProductId(rs.getInt("product_id"));
+                item.setProductName(rs.getString("product_name"));
+                item.setProductPrice(rs.getDouble("product_price"));
+                item.setQuantity(rs.getInt("quantity"));
+                item.setSubtotal(rs.getDouble("subtotal"));
+                list.add(item);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DBUtil.close(conn, ps, rs);
+        }
+        return list;
+    }
+
+    private Order extractOrder(ResultSet rs) throws SQLException {
+        Order order = new Order();
+        order.setId(rs.getInt("id"));
+        order.setUserId(rs.getInt("user_id"));
+        order.setOrderNo(rs.getString("order_no"));
+        order.setTotalAmount(rs.getDouble("total_amount"));
+        order.setStatus(rs.getString("status"));
+        order.setReceiverName(rs.getString("receiver_name"));
+        order.setReceiverPhone(rs.getString("receiver_phone"));
+        order.setReceiverAddress(rs.getString("receiver_address"));
+        order.setCreateTime(rs.getString("create_time"));
+        return order;
+    }
+}
+
+================================================================================
+八、控制层 (Servlet) - 8个Servlet
+================================================================================
+
+--------------------------------------------------------------------------------
+8.1 LoginServlet.java - 用户登录
+--------------------------------------------------------------------------------
+
+package com.shop.servlet;
+
+import com.shop.dao.UserDao;
+import com.shop.model.User;
+import javax.servlet.ServletException;
+import javax.servlet.http.*;
+import java.io.IOException;
+
+/**
+ * 用户登录 Servlet
+ *
+ * ★ 映射路径：/user/login
+ * ★ GET 请求：转发到 login.jsp 登录页面
+ * ★ POST 请求：接收表单提交，验证用户名密码
+ *
+ * ★ Session 机制：
+ *   登录成功后将 User 对象存入 req.getSession()
+ *   后续请求通过 session.getAttribute("user") 获取当前登录用户
+ *   退出登录时调用 session.invalidate() 销毁 Session
+ */
+public class LoginServlet extends HttpServlet {
+
+    private UserDao userDao = new UserDao();
+
+    /**
+     * GET /user/login — 显示登录页面
+     */
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        // forward 是服务器内部转发，URL不变，request 属性保留
+        req.getRequestDispatcher("/jsp/login.jsp").forward(req, resp);
+    }
+
+    /**
+     * POST /user/login — 处理登录表单
+     *
+     * 流程：
+     *   1. 获取 username, password 参数
+     *   2. 非空校验（前后端双重验证）
+     *   3. 调用 UserDao 查询数据库
+     *   4. 成功 → Session 存储 User → 重定向到首页
+     *   5. 失败 → 设置 error 属性 → forward 回登录页显示错误
+     */
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        String username = req.getParameter("username");
+        String password = req.getParameter("password");
+
+        // ★ 非空校验
+        if (username == null || password == null || username.trim().isEmpty() || password.trim().isEmpty()) {
+            req.setAttribute("error", "用户名和密码不能为空！");
+            req.getRequestDispatcher("/jsp/login.jsp").forward(req, resp);
+            return;  // ★ 提前返回，不再执行后续代码
+        }
+
+        // ★ 查询用户
+        User user = userDao.findByUsernameAndPassword(username.trim(), password.trim());
+
+        if (user != null) {
+            // ★ 登录成功 — 用户信息存入 Session
+            req.getSession().setAttribute("user", user);
+            // ★ 重定向到首页（客户端跳转，URL会变）
+            //   使用 redirect 而非 forward 是为了避免刷新页面时重复提交表单
+            resp.sendRedirect(req.getContextPath() + "/jsp/index.jsp");
+        } else {
+            req.setAttribute("error", "用户名或密码错误！");
+            req.getRequestDispatcher("/jsp/login.jsp").forward(req, resp);
+        }
+    }
+}
+
+--------------------------------------------------------------------------------
+8.2 RegisterServlet.java - 用户注册
+--------------------------------------------------------------------------------
+
+package com.shop.servlet;
+
+import com.shop.dao.UserDao;
+import com.shop.model.User;
+import javax.servlet.ServletException;
+import javax.servlet.http.*;
+import java.io.IOException;
+
+/**
+ * 用户注册 Servlet
+ *
+ * ★ 注册验证流程：
+ *   1. 用户名非空
+ *   2. 密码长度 ≥ 6位
+ *   3. 两次密码一致
+ *   4. 用户名未被占用
+ *   5. 写入数据库
+ *   6. 注册成功后自动登录（直接写Session）
+ */
+public class RegisterServlet extends HttpServlet {
+
+    private UserDao userDao = new UserDao();
+
+    /** GET — 显示注册页面 */
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        req.getRequestDispatcher("/jsp/register.jsp").forward(req, resp);
+    }
+
+    /** POST — 处理注册表单 */
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        String username = req.getParameter("username");
+        String password = req.getParameter("password");
+        String repassword = req.getParameter("repassword");
+        String email = req.getParameter("email");
+        String phone = req.getParameter("phone");
+        String address = req.getParameter("address");
+
+        // ★ 逐步验证，每个失败直接返回对应错误信息
+
+        if (username == null || username.trim().isEmpty()) {
+            req.setAttribute("error", "用户名不能为空！");
+            req.getRequestDispatcher("/jsp/register.jsp").forward(req, resp);
+            return;
+        }
+
+        if (password == null || password.trim().length() < 6) {
+            req.setAttribute("error", "密码长度不能少于6位！");
+            req.getRequestDispatcher("/jsp/register.jsp").forward(req, resp);
+            return;
+        }
+
+        if (!password.equals(repassword)) {
+            req.setAttribute("error", "两次密码输入不一致！");
+            req.getRequestDispatcher("/jsp/register.jsp").forward(req, resp);
+            return;
+        }
+
+        // ★ 检查用户名是否已存在
+        User existUser = userDao.findByUsername(username.trim());
+        if (existUser != null) {
+            req.setAttribute("error", "该用户名已被注册！");
+            req.getRequestDispatcher("/jsp/register.jsp").forward(req, resp);
+            return;
+        }
+
+        // ★ 构建 User 对象
+        User user = new User();
+        user.setUsername(username.trim());
+        user.setPassword(password.trim());
+        user.setEmail(email != null ? email.trim() : "");
+        user.setPhone(phone != null ? phone.trim() : "");
+        user.setAddress(address != null ? address.trim() : "");
+
+        int result = userDao.save(user);  // 写入数据库，返回新ID
+        if (result > 0) {
+            // ★ 注册成功，查询完整用户信息，自动登录
+            User savedUser = userDao.findById(result);
+            req.getSession().setAttribute("user", savedUser);
+            resp.sendRedirect(req.getContextPath() + "/jsp/index.jsp");
+        } else {
+            req.setAttribute("error", "注册失败，请稍后重试！");
+            req.getRequestDispatcher("/jsp/register.jsp").forward(req, resp);
+        }
+    }
+}
+
+--------------------------------------------------------------------------------
+8.3 LogoutServlet.java - 退出登录
+--------------------------------------------------------------------------------
+
+package com.shop.servlet;
+
+import javax.servlet.ServletException;
+import javax.servlet.http.*;
+import java.io.IOException;
+
+/**
+ * 用户退出 Servlet
+ *
+ * ★ 只需销毁 Session 并重定向到首页
+ *   session.invalidate() 会清除所有 Session 数据
+ *   下次请求时 server 会创建新的 Session
+ */
+public class LogoutServlet extends HttpServlet {
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        req.getSession().invalidate();  // ★ 销毁Session
+        resp.sendRedirect(req.getContextPath() + "/jsp/index.jsp");
+    }
+}
+
+--------------------------------------------------------------------------------
+8.4 ProductServlet.java - 商品展示
+--------------------------------------------------------------------------------
+
+package com.shop.servlet;
+
+import com.shop.dao.ProductDao;
+import com.shop.model.Product;
+import javax.servlet.ServletException;
+import javax.servlet.http.*;
+import java.io.IOException;
+import java.util.List;
+
+/**
+ * 商品 Servlet — 处理商品列表、搜索、详情、分类/品牌筛选
+ *
+ * ★ action 参数路由：
+ *   list     → 全部商品列表
+ *   detail   → 商品详情页（需传 id）
+ *   search   → 搜索商品（需传 keyword）
+ *   category → 按分类筛选（需传 cat）
+ *   brand    → 按品牌筛选（需传 name）
+ */
+public class ProductServlet extends HttpServlet {
+
+    private ProductDao productDao = new ProductDao();
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        String action = req.getParameter("action");
+        if (action == null) {
+            action = "list";  // 默认显示全部商品
+        }
+
+        // ★ 使用 switch 根据 action 分发到不同的处理方法
+        switch (action) {
+            case "detail":
+                showDetail(req, resp);
+                break;
+            case "search":
+                search(req, resp);
+                break;
+            case "category":
+                listByCategory(req, resp);
+                break;
+            case "brand":
+                listByBrand(req, resp);
+                break;
+            default:
+                listAll(req, resp);
+                break;
+        }
+    }
+
+    /** 全部商品列表 */
+    private void listAll(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        List<Product> products = productDao.findAll();
+        req.setAttribute("products", products);
+        req.getRequestDispatcher("/jsp/product_list.jsp").forward(req, resp);
+    }
+
+    /** 商品详情 — 通过ID查询单个商品 */
+    private void showDetail(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        String idStr = req.getParameter("id");
+        if (idStr != null) {
+            int id = Integer.parseInt(idStr);
+            Product product = productDao.findById(id);
+            if (product != null) {
+                req.setAttribute("product", product);
+                req.getRequestDispatcher("/jsp/product_detail.jsp").forward(req, resp);
+                return;
+            }
+        }
+        // 商品不存在或无ID → 重定向到列表页
+        resp.sendRedirect(req.getContextPath() + "/product?action=list");
+    }
+
+    /** 模糊搜索 — 按名称/品牌/描述搜索 */
+    private void search(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        String keyword = req.getParameter("keyword");
+        List<Product> products;
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            products = productDao.search(keyword.trim());
+            req.setAttribute("keyword", keyword.trim());  // 回显搜索关键词
+        } else {
+            products = productDao.findAll();  // 空关键字显示全部
+        }
+        req.setAttribute("products", products);
+        req.getRequestDispatcher("/jsp/product_list.jsp").forward(req, resp);
+    }
+
+    /** 按分类筛选 */
+    private void listByCategory(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        String category = req.getParameter("cat");
+        List<Product> products = productDao.findByCategory(category);
+        req.setAttribute("products", products);
+        req.setAttribute("currentCategory", category);  // 高亮当前分类
+        req.getRequestDispatcher("/jsp/product_list.jsp").forward(req, resp);
+    }
+
+    /** 按品牌筛选 */
+    private void listByBrand(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        String brand = req.getParameter("name");
+        List<Product> products = productDao.findByBrand(brand);
+        req.setAttribute("products", products);
+        req.setAttribute("currentBrand", brand);  // 高亮当前品牌
+        req.getRequestDispatcher("/jsp/product_list.jsp").forward(req, resp);
+    }
+}
+
+--------------------------------------------------------------------------------
+8.5 CartServlet.java - 购物车
+--------------------------------------------------------------------------------
+
+package com.shop.servlet;
+
+import com.shop.dao.CartDao;
+import com.shop.dao.ProductDao;
+import com.shop.model.CartItem;
+import com.shop.model.Product;
+import com.shop.model.User;
+import javax.servlet.ServletException;
+import javax.servlet.http.*;
+import java.io.IOException;
+import java.util.List;
+
+/**
+ * 购物车 Servlet
+ *
+ * ★ 权限检查：所有操作都需要登录
+ *   未登录用户访问购物车 → 重定向到登录页
+ *
+ * ★ action 路由：
+ *   list   → 查看购物车
+ *   add    → 添加到购物车（需传 productId, quantity）
+ *   update → 更新数量（需传 id, quantity）
+ *   delete → 删除购物车项（需传 id）
+ *
+ * ★ 添加到购物车逻辑：
+ *   如果该商品已在购物车 → 累加数量
+ *   如果该商品不在购物车 → 新增记录
+ */
+public class CartServlet extends HttpServlet {
+
+    private CartDao cartDao = new CartDao();
+    private ProductDao productDao = new ProductDao();
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        // ★ 权限检查：从 Session 获取当前登录用户
+        User user = (User) req.getSession().getAttribute("user");
+        if (user == null) {
+            resp.sendRedirect(req.getContextPath() + "/user/login");
+            return;
+        }
+
+        String action = req.getParameter("action");
+        if (action == null) action = "list";
+
+        switch (action) {
+            case "add":
+                addToCart(req, resp, user);
+                break;
+            case "update":
+                updateCart(req, resp);
+                break;
+            case "delete":
+                deleteFromCart(req, resp);
+                break;
+            default:
+                listCart(req, resp, user);
+                break;
+        }
+    }
+
+    /** POST 请求委托给 doGet 处理 */
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        doGet(req, resp);
+    }
+
+    /** ★ 查看购物车 — 计算总价 */
+    private void listCart(HttpServletRequest req, HttpServletResponse resp, User user)
+            throws ServletException, IOException {
+        List<CartItem> cartItems = cartDao.findByUserId(user.getId());
+        // ★ Java 8 Stream API 计算订单总价
+        double total = cartItems.stream().mapToDouble(CartItem::getSubtotal).sum();
+        req.setAttribute("cartItems", cartItems);
+        req.setAttribute("total", total);
+        req.getRequestDispatcher("/jsp/cart.jsp").forward(req, resp);
+    }
+
+    /** ★ 添加到购物车 — 如果已存在则累加数量 */
+    private void addToCart(HttpServletRequest req, HttpServletResponse resp, User user)
+            throws IOException {
+        String productIdStr = req.getParameter("productId");
+        String quantityStr = req.getParameter("quantity");
+
+        if (productIdStr == null) {
+            resp.sendRedirect(req.getContextPath() + "/product?action=list");
+            return;
+        }
+
+        int productId = Integer.parseInt(productIdStr);
+        int quantity = (quantityStr != null) ? Integer.parseInt(quantityStr) : 1;
+
+        // ★ 验证商品存在且有库存
+        Product product = productDao.findById(productId);
+        if (product == null || product.getStock() < 1) {
+            resp.sendRedirect(req.getContextPath() + "/product?action=list");
+            return;
+        }
+
+        // ★ 判断是新增还是更新
+        CartItem existItem = cartDao.findByUserAndProduct(user.getId(), productId);
+        if (existItem != null) {
+            // 已存在 → 累加数量
+            int newQuantity = existItem.getQuantity() + quantity;
+            cartDao.updateQuantity(existItem.getId(), newQuantity);
+        } else {
+            // 不存在 → 新增记录
+            CartItem item = new CartItem();
+            item.setUserId(user.getId());
+            item.setProductId(productId);
+            item.setQuantity(quantity);
+            cartDao.add(item);
+        }
+        resp.sendRedirect(req.getContextPath() + "/cart?action=list");
+    }
+
+    /** ★ 更新购物车数量（数量≤0时自动删除） */
+    private void updateCart(HttpServletRequest req, HttpServletResponse resp)
+            throws IOException {
+        String idStr = req.getParameter("id");
+        String quantityStr = req.getParameter("quantity");
+        if (idStr != null && quantityStr != null) {
+            int id = Integer.parseInt(idStr);
+            int quantity = Integer.parseInt(quantityStr);
+            if (quantity > 0) {
+                cartDao.updateQuantity(id, quantity);
+            } else {
+                cartDao.delete(id);  // 数量≤0时自动移除
+            }
+        }
+        resp.sendRedirect(req.getContextPath() + "/cart?action=list");
+    }
+
+    /** ★ 从购物车删除商品 */
+    private void deleteFromCart(HttpServletRequest req, HttpServletResponse resp)
+            throws IOException {
+        String idStr = req.getParameter("id");
+        if (idStr != null) {
+            cartDao.delete(Integer.parseInt(idStr));
+        }
+        resp.sendRedirect(req.getContextPath() + "/cart?action=list");
+    }
+}
+
+--------------------------------------------------------------------------------
+8.6 OrderServlet.java - 订单处理
+--------------------------------------------------------------------------------
+
+package com.shop.servlet;
+
+import com.shop.dao.CartDao;
+import com.shop.dao.OrderDao;
+import com.shop.dao.ProductDao;
+import com.shop.model.*;
+import javax.servlet.ServletException;
+import javax.servlet.http.*;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+
+/**
+ * 订单 Servlet
+ *
+ * ★ 核心流程：
+ *   1. 用户点击"去结算" → showCreateOrder（显示确认页）
+ *   2. 用户填写收货信息 → submitOrder（创建订单）
+ *   3. 创建订单时：生成订单号 → 插入数据库（事务） → 扣库存 → 清空购物车
+ */
+public class OrderServlet extends HttpServlet {
+
+    private OrderDao orderDao = new OrderDao();
+    private CartDao cartDao = new CartDao();
+    private ProductDao productDao = new ProductDao();
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        // ★ 权限检查
+        User user = (User) req.getSession().getAttribute("user");
+        if (user == null) {
+            resp.sendRedirect(req.getContextPath() + "/user/login");
+            return;
+        }
+
+        String action = req.getParameter("action");
+        if (action == null) action = "list";
+
+        switch (action) {
+            case "create":
+                showCreateOrder(req, resp, user);  // 显示下单确认页
+                break;
+            default:
+                listOrders(req, resp, user);       // 我的订单列表
+                break;
+        }
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        User user = (User) req.getSession().getAttribute("user");
+        if (user == null) {
+            resp.sendRedirect(req.getContextPath() + "/user/login");
+            return;
+        }
+
+        String action = req.getParameter("action");
+        if ("submit".equals(action)) {
+            submitOrder(req, resp, user);  // ★ 提交订单
+        } else {
+            doGet(req, resp);
+        }
+    }
+
+    /** 显示下单确认页面 — 展示购物车商品和收货信息表单 */
+    private void showCreateOrder(HttpServletRequest req, HttpServletResponse resp, User user)
+            throws ServletException, IOException {
+        List<CartItem> cartItems = cartDao.findByUserId(user.getId());
+        if (cartItems.isEmpty()) {
+            resp.sendRedirect(req.getContextPath() + "/cart?action=list");
+            return;
+        }
+        double total = cartItems.stream().mapToDouble(CartItem::getSubtotal).sum();
+        req.setAttribute("cartItems", cartItems);
+        req.setAttribute("total", total);
+        req.setAttribute("user", user);
+        req.getRequestDispatcher("/jsp/order_create.jsp").forward(req, resp);
+    }
+
+    /**
+     * ★ 提交订单 — 核心业务方法
+     *
+     * 步骤：
+     *   1. 获取收货信息
+     *   2. 获取购物车商品
+     *   3. 生成唯一订单编号（MO + 时间戳 + 用户ID）
+     *   4. 构建 Order + OrderItem 对象
+     *   5. 调用 OrderDao.createOrder()（内部使用事务）
+     *   6. 遍历购物车逐项扣减库存
+     *   7. 清空用户购物车
+     *   8. 重定向到订单列表
+     */
+    private void submitOrder(HttpServletRequest req, HttpServletResponse resp, User user)
+            throws IOException {
+        String receiverName = req.getParameter("receiverName");
+        String receiverPhone = req.getParameter("receiverPhone");
+        String receiverAddress = req.getParameter("receiverAddress");
+
+        List<CartItem> cartItems = cartDao.findByUserId(user.getId());
+        if (cartItems.isEmpty()) {
+            resp.sendRedirect(req.getContextPath() + "/cart?action=list");
+            return;
+        }
+
+        double total = cartItems.stream().mapToDouble(CartItem::getSubtotal).sum();
+
+        // ★ 生成订单编号：MO + 年月日时分秒 + 用户ID补零4位
+        String orderNo = "MO" +
+            new SimpleDateFormat("yyyyMMddHHmmss").format(new Date()) +
+            String.format("%04d", user.getId());
+
+        // ★ 构建订单对象
+        Order order = new Order();
+        order.setUserId(user.getId());
+        order.setOrderNo(orderNo);
+        order.setTotalAmount(total);
+        order.setStatus("待发货");  // 初始状态
+        // 收货人信息默认使用用户的注册信息
+        order.setReceiverName(receiverName != null ? receiverName : user.getUsername());
+        order.setReceiverPhone(receiverPhone != null ? receiverPhone : (user.getPhone() != null ? user.getPhone() : ""));
+        order.setReceiverAddress(receiverAddress != null ? receiverAddress : (user.getAddress() != null ? user.getAddress() : ""));
+
+        // ★ 构建订单明细 + 扣减库存
+        for (CartItem cartItem : cartItems) {
+            OrderItem item = new OrderItem();
+            item.setProductId(cartItem.getProductId());
+            item.setProductName(cartItem.getProductName());    // 快照
+            item.setProductPrice(cartItem.getProductPrice());  // 快照
+            item.setQuantity(cartItem.getQuantity());
+            item.setSubtotal(cartItem.getSubtotal());
+            order.getItems().add(item);
+
+            // ★ 每一步都扣减对应商品的库存
+            productDao.updateStock(cartItem.getProductId(), cartItem.getQuantity());
+        }
+
+        int orderId = orderDao.createOrder(order);  // 事务写入数据库
+        if (orderId > 0) {
+            cartDao.clearByUserId(user.getId());  // 下单成功后清空购物车
+            resp.sendRedirect(req.getContextPath() + "/order?action=list");
+        } else {
+            resp.getWriter().write("<script>alert('下单失败，请重试！');history.back();</script>");
+        }
+    }
+
+    /** 查看我的订单列表 */
+    private void listOrders(HttpServletRequest req, HttpServletResponse resp, User user)
+            throws ServletException, IOException {
+        List<Order> orders = orderDao.findByUserId(user.getId());
+        req.setAttribute("orders", orders);
+        req.getRequestDispatcher("/jsp/order_list.jsp").forward(req, resp);
+    }
+}
+
+--------------------------------------------------------------------------------
+8.7 AdminProductServlet.java - 管理员商品管理
+--------------------------------------------------------------------------------
+
+package com.shop.servlet;
+
+import com.shop.dao.ProductDao;
+import com.shop.model.Product;
+import com.shop.model.User;
+import javax.servlet.ServletException;
+import javax.servlet.http.*;
+import java.io.IOException;
+import java.util.List;
+
+/**
+ * ★ 管理员商品管理 Servlet
+ *
+ * ★ 权限控制：每个方法开头都调用 isAdmin() 检查
+ *   如果不是管理员 → 重定向到登录页
+ *
+ * ★ action 路由：
+ *   list   → 商品管理列表
+ *   add    → 显示添加商品表单
+ *   save   → 保存新商品（POST）
+ *   edit   → 显示编辑商品表单
+ *   update → 更新商品（POST）
+ *   delete → 删除商品
+ */
+public class AdminProductServlet extends HttpServlet {
+
+    private ProductDao productDao = new ProductDao();
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        if (!isAdmin(req, resp)) return;  // ★ 权限检查
+
+        String action = req.getParameter("action");
+        if (action == null) action = "list";
+
+        switch (action) {
+            case "add":
+                req.getRequestDispatcher("/jsp/admin/product_form.jsp").forward(req, resp);
+                break;
+            case "edit":
+                showEditForm(req, resp);  // 带数据的编辑表单
+                break;
+            case "delete":
+                deleteProduct(req, resp);
+                break;
+            default:
+                listProducts(req, resp);
+                break;
+        }
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        if (!isAdmin(req, resp)) return;  // ★ 权限检查
+
+        String action = req.getParameter("action");
+        if ("save".equals(action)) {
+            saveProduct(req, resp);     // 添加
+        } else if ("update".equals(action)) {
+            updateProduct(req, resp);   // 编辑
+        }
+    }
+
+    /** 商品列表 */
+    private void listProducts(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        List<Product> products = productDao.findAll();
+        req.setAttribute("products", products);
+        req.getRequestDispatcher("/jsp/admin/product_list.jsp").forward(req, resp);
+    }
+
+    /** 编辑表单 — 加载已有商品数据 */
+    private void showEditForm(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        String idStr = req.getParameter("id");
+        if (idStr != null) {
+            Product product = productDao.findById(Integer.parseInt(idStr));
+            req.setAttribute("product", product);  // ★ 回填到表单
+        }
+        req.getRequestDispatcher("/jsp/admin/product_form.jsp").forward(req, resp);
+    }
+
+    /** 保存新商品 */
+    private void saveProduct(HttpServletRequest req, HttpServletResponse resp)
+            throws IOException {
+        Product product = new Product();
+        product.setName(req.getParameter("name"));
+        product.setBrand(req.getParameter("brand"));
+        product.setDescription(req.getParameter("description"));
+        product.setPrice(Double.parseDouble(req.getParameter("price")));
+        product.setStock(Integer.parseInt(req.getParameter("stock")));
+        product.setImage(req.getParameter("image"));
+        product.setCategory(req.getParameter("category"));
+        productDao.save(product);
+        resp.sendRedirect(req.getContextPath() + "/admin/product?action=list");
+    }
+
+    /** 更新商品 */
+    private void updateProduct(HttpServletRequest req, HttpServletResponse resp)
+            throws IOException {
+        Product product = new Product();
+        product.setId(Integer.parseInt(req.getParameter("id")));  // ★ 必须传ID
+        product.setName(req.getParameter("name"));
+        product.setBrand(req.getParameter("brand"));
+        product.setDescription(req.getParameter("description"));
+        product.setPrice(Double.parseDouble(req.getParameter("price")));
+        product.setStock(Integer.parseInt(req.getParameter("stock")));
+        product.setImage(req.getParameter("image"));
+        product.setCategory(req.getParameter("category"));
+        productDao.update(product);
+        resp.sendRedirect(req.getContextPath() + "/admin/product?action=list");
+    }
+
+    /** 删除商品 */
+    private void deleteProduct(HttpServletRequest req, HttpServletResponse resp)
+            throws IOException {
+        String idStr = req.getParameter("id");
+        if (idStr != null) {
+            productDao.delete(Integer.parseInt(idStr));
+        }
+        resp.sendRedirect(req.getContextPath() + "/admin/product?action=list");
+    }
+
+    /**
+     * ★ 检查管理员权限
+     * 从 Session 获取 user，验证 role == "admin"
+     * @return true=管理员, false=已重定向到登录页
+     */
+    private boolean isAdmin(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        User user = (User) req.getSession().getAttribute("user");
+        if (user == null || !"admin".equals(user.getRole())) {
+            resp.sendRedirect(req.getContextPath() + "/user/login");
+            return false;
+        }
+        return true;
+    }
+}
+
+--------------------------------------------------------------------------------
+8.8 AdminOrderServlet.java - 管理员订单管理
+--------------------------------------------------------------------------------
+
+package com.shop.servlet;
+
+import com.shop.dao.OrderDao;
+import com.shop.model.Order;
+import com.shop.model.User;
+import javax.servlet.ServletException;
+import javax.servlet.http.*;
+import java.io.IOException;
+import java.util.List;
+
+/**
+ * ★ 管理员订单管理 Servlet
+ *
+ * ★ 功能：
+ *   list     → 所有订单列表
+ *   ship     → 发货（状态：待发货 → 已发货）
+ *   complete → 完成订单（状态：已发货 → 已完成）
+ *   delete   → 删除订单
+ */
+public class AdminOrderServlet extends HttpServlet {
+
+    private OrderDao orderDao = new OrderDao();
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        if (!isAdmin(req, resp)) return;  // ★ 权限检查
+
+        String action = req.getParameter("action");
+        if (action == null) action = "list";
+
+        switch (action) {
+            case "ship":
+                shipOrder(req, resp);
+                break;
+            case "complete":
+                completeOrder(req, resp);
+                break;
+            case "delete":
+                deleteOrder(req, resp);
+                break;
+            default:
+                listOrders(req, resp);
+                break;
+        }
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        doGet(req, resp);
+    }
+
+    /** 所有订单列表 */
+    private void listOrders(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        List<Order> orders = orderDao.findAll();  // ★ 管理员可见所有订单
+        req.setAttribute("orders", orders);
+        req.getRequestDispatcher("/jsp/admin/order_list.jsp").forward(req, resp);
+    }
+
+    /** 发货 — 更新状态为"已发货" */
+    private void shipOrder(HttpServletRequest req, HttpServletResponse resp)
+            throws IOException {
+        String idStr = req.getParameter("id");
+        if (idStr != null) {
+            orderDao.updateStatus(Integer.parseInt(idStr), "已发货");
+        }
+        resp.sendRedirect(req.getContextPath() + "/admin/order?action=list");
+    }
+
+    /** 完成订单 — 更新状态为"已完成" */
+    private void completeOrder(HttpServletRequest req, HttpServletResponse resp)
+            throws IOException {
+        String idStr = req.getParameter("id");
+        if (idStr != null) {
+            orderDao.updateStatus(Integer.parseInt(idStr), "已完成");
+        }
+        resp.sendRedirect(req.getContextPath() + "/admin/order?action=list");
+    }
+
+    /** 删除订单 */
+    private void deleteOrder(HttpServletRequest req, HttpServletResponse resp)
+            throws IOException {
+        String idStr = req.getParameter("id");
+        if (idStr != null) {
+            orderDao.delete(Integer.parseInt(idStr));
+        }
+        resp.sendRedirect(req.getContextPath() + "/admin/order?action=list");
+    }
+
+    /** ★ 权限检查 — 同 AdminProductServlet */
+    private boolean isAdmin(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        User user = (User) req.getSession().getAttribute("user");
+        if (user == null || !"admin".equals(user.getRole())) {
+            resp.sendRedirect(req.getContextPath() + "/user/login");
+            return false;
+        }
+        return true;
+    }
+}
+
+
+================================================================================
+九、视图层 (JSP) - 前端页面
+================================================================================
+
+★ 公共说明：
+  - 所有页面 include header.jsp（含 Bootstrap CSS、导航栏）
+  - 所有页面 include footer.jsp（含 Bootstrap JS、页脚）
+  - 通过 contextPath Java变量 构建绝对路径
+  - 通过 JSTL <c:> 标签做条件判断和循环
+  - 通过 EL表达式 ${} 访问 request/session 属性
+  - 通过 JSTL <fmt:formatNumber> 格式化价格显示
+
+--------------------------------------------------------------------------------
+9.1 header.jsp - 公共头部（导航栏）
+--------------------------------------------------------------------------------
+
+<!--
+  ★ 所有页面的公共头部
+  - 引入 Bootstrap 5.3 CSS + Bootstrap Icons
+  - 定义全局 CSS 样式（价格颜色、卡片动画等）
+  - 响应式导航栏：首页、搜索、商品、购物车、订单、登录/退出
+  - 根据用户登录状态显示不同菜单
+  - 管理员额外显示"管理"下拉菜单
+  - 声明 JSTL <c:> 和 <fmt:> 标签库（所有 include 它的页面自动可用）
+-->
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ taglib prefix="fmt" uri="http://java.sun.com/jsp/jstl/fmt" %>
+<%
+    // ★ 声明全局 Java 变量，在 JSP 中通过 <%=contextPath%> 使用
+    com.shop.model.User loginUser = (com.shop.model.User) session.getAttribute("user");
+    String contextPath = request.getContextPath();  // 部署路径，例: /mobile-shop
+%>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手机商城</title>
+    <!-- 使用 BootCDN 加速（国内访问更快） -->
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background-color: #f5f5f5; }
+        .navbar { box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .card { transition: transform 0.2s; }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
+        .card-img-top { height: 200px; object-fit: contain; padding: 15px; background: #f8f9fa; }
+        .price { color: #e4393c; font-size: 1.3rem; font-weight: bold; }       /* 价格样式 */
+        .price-big { color: #e4393c; font-size: 1.8rem; font-weight: bold; }   /* 大号价格 */
+        .footer { background: #2c3e50; color: #ecf0f1; margin-top: 50px; padding: 30px 0; }
+        .category-sidebar .list-group-item { border: none; border-radius: 8px; margin-bottom: 5px; }
+        .category-sidebar .list-group-item:hover { background: #0d6efd; color: white; }
+    </style>
+</head>
+<body>
+
+<!-- ★ 导航栏 - 使用 Bootstrap 5 Navbar 组件 -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="<%=contextPath%>/jsp/index.jsp">
+            <i class="bi bi-phone"></i> 手机商城
+        </a>
+
+        <!-- 搜索框 -->
+        <form class="d-flex mx-auto" action="<%=contextPath%>/product" method="get" style="width: 40%;">
+            <input type="hidden" name="action" value="search">
+            <input class="form-control me-2" type="search" name="keyword" placeholder="搜索手机..." required>
+            <button class="btn btn-outline-light" type="submit"><i class="bi bi-search"></i></button>
+        </form>
+
+        <!-- 导航菜单 -->
+        <ul class="navbar-nav ms-auto">
+            <li class="nav-item">
+                <a class="nav-link" href="<%=contextPath%>/jsp/index.jsp"><i class="bi bi-house"></i> 首页</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="<%=contextPath%>/product?action=list"><i class="bi bi-grid"></i> 全部商品</a>
+            </li>
+
+            <% if (loginUser != null) { %>
+            <!-- ★ 已登录状态 -->
+            <li class="nav-item">
+                <a class="nav-link" href="<%=contextPath%>/cart?action=list"><i class="bi bi-cart3"></i> 购物车</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="<%=contextPath%>/order?action=list"><i class="bi bi-list-check"></i> 我的订单</a>
+            </li>
+
+            <% if ("admin".equals(loginUser.getRole())) { %>
+            <!-- ★ 管理员专属菜单 -->
+            <li class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle text-warning" href="#" role="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-shield-lock"></i> 管理
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="<%=contextPath%>/admin/product?action=list">商品管理</a></li>
+                    <li><a class="dropdown-item" href="<%=contextPath%>/admin/order?action=list">订单管理</a></li>
+                </ul>
+            </li>
+            <% } %>
+
+            <li class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-person-circle"></i> <%=loginUser.getUsername()%>
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><span class="dropdown-item-text">角色: <%= "admin".equals(loginUser.getRole()) ? "管理员" : "普通用户" %></span></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="<%=contextPath%>/user/logout">退出登录</a></li>
+                </ul>
+            </li>
+
+            <% } else { %>
+            <!-- ★ 未登录状态 -->
+            <li class="nav-item">
+                <a class="nav-link" href="<%=contextPath%>/user/login"><i class="bi bi-box-arrow-in-right"></i> 登录</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="<%=contextPath%>/user/register"><i class="bi bi-person-plus"></i> 注册</a>
+            </li>
+            <% } %>
+        </ul>
+    </div>
+</nav>
+
+--------------------------------------------------------------------------------
+9.2 footer.jsp - 公共页脚
+--------------------------------------------------------------------------------
+
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+
+<!-- ★ 页脚区域 -->
+<footer class="footer">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-4">
+                <h5><i class="bi bi-phone"></i> 手机商城</h5>
+                <p class="text-muted">精选优质手机，好价正品保障</p>
+            </div>
+            <div class="col-md-4">
+                <h5>购物指南</h5>
+                <ul class="list-unstyled">
+                    <li><a href="#" class="text-muted text-decoration-none">购物流程</a></li>
+                    <li><a href="#" class="text-muted text-decoration-none">支付方式</a></li>
+                    <li><a href="#" class="text-muted text-decoration-none">配送说明</a></li>
+                </ul>
+            </div>
+            <div class="col-md-4">
+                <h5>售后服务</h5>
+                <ul class="list-unstyled">
+                    <li><a href="#" class="text-muted text-decoration-none">退换货政策</a></li>
+                    <li><a href="#" class="text-muted text-decoration-none">保修服务</a></li>
+                    <li><a href="#" class="text-muted text-decoration-none">联系我们</a></li>
+                </ul>
+            </div>
+        </div>
+        <hr class="border-secondary">
+        <div class="text-center">
+            <p class="mb-0">&copy; 2025 手机商城 JavaWeb期末作业</p>
+        </div>
+    </div>
+</footer>
+
+<!-- Bootstrap JS（包含 Popper.js） -->
+<script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+--------------------------------------------------------------------------------
+9.3 index.jsp - 首页（轮播 + 热销推荐 + 品牌/分类入口）
+--------------------------------------------------------------------------------
+
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="com.shop.dao.ProductDao, com.shop.model.Product, java.util.List" %>
+<%
+    // ★ 首页用 Java 脚本直接查询前8个商品
+    // 注：这是简化的做法，正式项目应通过 Servlet 处理
+    ProductDao productDao = new ProductDao();
+    List<Product> products = productDao.findAll();
+    if (products.size() > 8) {
+        products = products.subList(0, 8);  // 截取前8个
+    }
+    request.setAttribute("homeProducts", products);  // 放入 request 供 EL 使用
+%>
+<%@ include file="header.jsp" %>
+
+<!-- ★ Bootstrap 轮播横幅 — 3张渐变背景图 -->
+<div id="heroCarousel" class="carousel slide mb-4" data-bs-ride="carousel">
+    <div class="carousel-inner rounded-3">
+        <div class="carousel-item active" style="height: 350px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <div class="d-flex align-items-center justify-content-center h-100 text-white text-center">
+                <div>
+                    <h1 class="fw-bold">新品首发 · 震撼上市</h1>
+                    <p class="lead">2025旗舰手机，尽在手机商城</p>
+                    <a href="<%=contextPath%>/product?action=list" class="btn btn-light btn-lg">立即选购</a>
+                </div>
+            </div>
+        </div>
+        <!-- 第2张和第3张轮播图类似，省略 -->
+    </div>
+</div>
+
+<!-- ★ 热销推荐 — 使用 JSTL <c:forEach> 遍历商品列表 -->
+<div class="container mb-5">
+    <h3><i class="bi bi-fire text-danger"></i> 热销推荐</h3>
+    <div class="row">
+        <c:forEach items="${homeProducts}" var="p">
+            <div class="col-6 col-md-3 mb-3">
+                <div class="card h-100">
+                    <!-- ★ 商品图片 — onerror 处理图片缺失 -->
+                    <img src="${pageContext.request.contextPath}/images/${p.image}"
+                         class="card-img-top" alt="${p.name}"
+                         onerror="this.onerror=null;this.src='${pageContext.request.contextPath}/images/default.svg'">
+                    <div class="card-body">
+                        <h6 class="card-title text-truncate">${p.name}</h6>
+                        <p class="card-text small text-muted">${p.brand} | ${p.category}</p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <!-- ★ 价格格式化显示 -->
+                            <span class="price">&yen;<fmt:formatNumber value="${p.price}" pattern="#,##0.00"/></span>
+                            <a href="<%=contextPath%>/product?action=detail&id=${p.id}" class="btn btn-sm btn-outline-primary">详情</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </c:forEach>
+    </div>
+</div>
+
+<!-- 品牌专区 — 使用 Java for 循环生成品牌卡片 -->
+<!-- 分类入口 — 展示4个商品分类入口 -->
+<%@ include file="footer.jsp" %>
+
+--------------------------------------------------------------------------------
+9.4 login.jsp - 登录页面
+--------------------------------------------------------------------------------
+
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ include file="header.jsp" %>
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-5">
+            <div class="card shadow">
+                <div class="card-body p-5">
+                    <div class="text-center mb-4">
+                        <i class="bi bi-phone fs-1 text-primary"></i>
+                        <h3>手机商城</h3>
+                        <p class="text-muted">欢迎回来，请登录您的账户</p>
+                    </div>
+
+                    <!-- ★ 错误提示 — 从 request.getAttribute("error") 获取 -->
+                    <% if (request.getAttribute("error") != null) { %>
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="bi bi-exclamation-triangle"></i> <%=request.getAttribute("error")%>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                    <% } %>
+
+                    <!-- ★ 登录表单 — POST 到 /user/login -->
+                    <form action="<%=contextPath%>/user/login" method="post">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">用户名</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                <input type="text" class="form-control" id="username" name="username"
+                                       placeholder="请输入用户名" required>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">密码</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                <input type="password" class="form-control" id="password" name="password"
+                                       placeholder="请输入密码" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mb-3">
+                            <i class="bi bi-box-arrow-in-right"></i> 登录
+                        </button>
+                    </form>
+
+                    <div class="text-center">
+                        <p class="mb-0">还没有账号？<a href="<%=contextPath%>/user/register">立即注册</a></p>
+                    </div>
+
+                    <hr>
+                    <div class="text-center">
+                        <small class="text-muted">
+                            管理员账号: admin / admin123<br>
+                            测试用户: test / test123
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%@ include file="footer.jsp" %>
+
+--------------------------------------------------------------------------------
+9.5 register.jsp - 注册页面
+--------------------------------------------------------------------------------
+
+（省略完整代码，结构与 login.jsp 类似）
+
+★ 关键区别：
+  - 多一个"确认密码"输入框
+  - 包含邮箱、手机号、收货地址字段
+  - 表单 POST 到 /user/register
+  - 密码最小长度 6 位（minlength="6"）
+
+--------------------------------------------------------------------------------
+9.6 product_list.jsp - 商品列表页（含侧边栏筛选）
+--------------------------------------------------------------------------------
+
+★ 页面结构：
+  左侧(col-md-3)：品牌筛选 + 分类筛选（使用 JSTL 判断 active 高亮）
+  右侧(col-md-9)：商品卡片网格（3列，响应式）
+
+★ 三元运算符在 EL 中判断选中状态：
+  class="${empty currentBrand ? 'active' : ''}"
+
+★ 价格格式化使用 <fmt:formatNumber> 替代 String.format
+
+★ 缺货处理：
+  ${p.stock > 0 ? '有货' : '缺货'}
+  (这里用 EL 三元运算符没问题，因为两个都是字符串常量)
+
+--------------------------------------------------------------------------------
+9.7 product_detail.jsp - 商品详情页
+--------------------------------------------------------------------------------
+
+★ 核心展示：
+  - 左列：商品大图（带 onerror 回退）
+  - 右列：名称、品牌、分类、价格、库存状态、描述
+  - 库存 > 0 时显示数量选择器和"加入购物车"按钮
+  - 库存 ≤ 0 时显示"暂时缺货"禁用按钮
+
+★ 关键修复点：
+  1. 价格：使用 <fmt:formatNumber> 替代 String.format
+  2. 库存显示：拆分为两个 <c:if> 替代 EL 字符串拼接
+  3. 图片 onerror：加 this.onerror=null 防止无限循环
+
+--------------------------------------------------------------------------------
+9.8 cart.jsp - 购物车页面
+--------------------------------------------------------------------------------
+
+★ 核心功能：
+  - 表格展示购物车商品：缩略图、名称、单价、数量(可修改)、小计、删除
+  - 数量输入框 onchange 自动提交表单更新
+  - 底部汇总：商品件数 + 合计金额 + "去结算"按钮
+
+★ 关键修复点：
+  - 所有价格用 <fmt:formatNumber> 格式化
+  - 图片 onerror 加 this.onerror=null
+
+--------------------------------------------------------------------------------
+9.9 order_create.jsp - 确认订单页面
+--------------------------------------------------------------------------------
+
+★ 核心内容：
+  - 收货信息表单（收货人、电话、地址，默认填充用户注册信息）
+  - 商品清单表格（缩略图、名称、单价、数量、小计）
+  - 订单汇总卡片（商品数量、总价、运费0元、应付总额）
+  - "提交订单"按钮（带 confirm 确认对话框）
+
+★ 关键修复点：
+  - 所有价格用 <fmt:formatNumber> 格式化
+  - 图片 onerror 加 this.onerror=null
+
+--------------------------------------------------------------------------------
+9.10 order_list.jsp - 订单列表页
+--------------------------------------------------------------------------------
+
+★ 每个订单卡片展示：
+  - 卡片头：订单号、时间、状态徽章（待发货=黄色、已发货=蓝色、已完成=绿色）
+  - 卡片体：商品明细列表（名称 × 数量 + 小计）
+  - 卡片尾：收货信息 + 总金额
+
+★ 状态颜色动态切换：
+  class="badge bg-${order.status == '待发货' ? 'warning' : (order.status == '已发货' ? 'info' : 'success')}"
+
+★ 关键修复点：
+  - 所有价格用 <fmt:formatNumber> 格式化
+
+--------------------------------------------------------------------------------
+9.11 admin/product_form.jsp - 商品表单（添加/编辑）
+--------------------------------------------------------------------------------
+
+★ 共用同一表单：
+  - 添加模式：action=save，表单为空，标题"添加商品"
+  - 编辑模式：action=update，回填数据，标题"编辑商品"
+
+★ 表单字段：
+  - 商品名称、品牌(下拉选择)、描述、价格、库存、分类、图片文件名
+
+★ 品牌下拉框使用 EL 三元运算符判断 selected：
+  ${product.brand == 'Apple' ? 'selected' : ''}
+
+★ 修复说明：
+  该文件使用 JSTL <c:out> 标签而非 EL 直接输出按钮文字
+  这是安全的做法（<c:out> 会自动转义 HTML 特殊字符，防 XSS）
+
+================================================================================
+十、系统架构总结
+================================================================================
+
+1. ★ 请求处理流程 ★
+   浏览器 → EncodingFilter(设UTF-8) → 目标Servlet → DAO(操作DB) → JSP(渲染) → 浏览器
+
+2. ★ 数据流转 ★
+   Servlet 处理业务逻辑，把数据通过 req.setAttribute() 传给 JSP
+   JSP 通过 EL表达式 ${xxx} 和 JSTL标签 <c:xxx> 展示数据
+
+3. ★ 权限控制 ★
+   - 普通用户：Session 中 user != null
+   - 管理员：user.role == "admin"
+   - 商品浏览不强制登录
+   - 购物车、下单需要登录
+
+4. ★ 订单状态流转 ★
+   待发货 → (管理员发货) → 已发货 → (管理员完成) → 已完成
+
+5. ★ 在页面上修复的问题 ★
+   - JSP EL 中不能用 String.format() → 改用 <fmt:formatNumber>
+   - JSP EL 中 + 不能拼接字符串 → 拆分 <c:if> 分支
+   - 图片 onerror 无限循环 → 加 this.onerror=null + 创建 default.svg
+   - 数据库中文默认值报错 → 关闭 sql_mode 严格模式后建表
+
+6. ★ 不足之处 ★
+   - 密码明文存储（生产环境应使用 BCrypt 加密）
+   - 数据库直连无连接池（生产环境应使用 HikariCP/Druid）
+   - N+1 查询问题（订单列表逐条查明细）
+   - 无分页功能
+   - 无输入校验和XSS防护
+
+================================================================================
+项目启动方式:
+  cd mobile-shop
+  mvn tomcat7:run
+  浏览器访问: http://localhost:8088/mobile-shop
+================================================================================
