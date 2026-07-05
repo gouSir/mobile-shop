@@ -1,4 +1,4 @@
-# 手机商城 - JavaWeb 期末作业
+# 手机商城 - 
 
 ## 项目概述
 一个基于 Java Servlet + JSP + MySQL 的手机购物平台网站。
